@@ -16,6 +16,7 @@ clean = { cmd = "pio run -t clean", description = "Remove build outputs" }
 configure = { cmd = "python tools/configure.py", description = "Configure the bridge over USB serial" }
 remote = { cmd = "python tools/remote.py", description = "Manage a deployed bridge over MQTT" }
 test-tools = { cmd = "pytest -q test/tools", description = "Unit tests for the host tools" }
+power-budget = { cmd = "python tools/power_budget.py", description = "Monthly harvest vs. load and storm autonomy" }
 
 [dependencies]
 python = "3.12.*"
