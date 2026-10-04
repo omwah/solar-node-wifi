@@ -74,7 +74,7 @@ The other topics under `solarnode/<id>/` (`cmd`, `resp`, `state`, `log`) are def
 | `aq` | block \| null | Air-quality source (AirGradient Open Air) |
 | `env` | block \| null | Weather source (Tempest / WeatherFlow) |
 | `debug` | bool | `true` starts a live management session (`PLAN.md` §4.5) |
-| `debug_until` | int \| null, epoch s | End of the session. The firmware also caps it at 2 h. |
+| `debug_until` | int \| null, epoch s | End of the session. The firmware also caps it at `session_cap_s` (default 2 h). A given `debug_until` starts at most one session. `debug: true` without it starts one default-length (30 min) session and re-arms only after a message with `debug: false`, so a forgotten retained flag can't keep WiFi on. |
 
 ### 3.2 Block
 

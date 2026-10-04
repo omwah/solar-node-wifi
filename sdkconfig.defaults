@@ -11,3 +11,9 @@ CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 # Core dumps to flash for remote diagnosis
 CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+
+# 80 MHz is enough for WiFi and lowers the always-on floor (docs/PLAN.md §6)
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_80=y
+
+# app_main runs the main loop: room for JSON documents and the poll procedure
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192

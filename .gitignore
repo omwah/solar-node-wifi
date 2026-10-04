@@ -9,3 +9,5 @@ sdkconfig.*
 !sdkconfig.defaults
 # Editor
 .vscode/
+# ESP-IDF component manager downloads (dependencies.lock pins them)
+managed_components/

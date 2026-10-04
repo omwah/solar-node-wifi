@@ -1,7 +1,12 @@
+#include "app.h"
+#include "console.h"
 #include "emulator.h"
 #include "i2c_slave.h"
+#include "log_buffer.h"
+#include "net.h"
 
 #include "esp_log.h"
+#include "nvs_flash.h"
 
 static const char *TAG = "main";
 
@@ -26,8 +31,21 @@ extern "C" void app_main(void)
     m.noxIndex = 1.0f;
     m.co2 = 450.0f;
     emulator.setMeasurement(m);
-    ESP_LOGW(TAG, "serving fixed test values");
+    ESP_LOGW(TAG, "Phase 0 build: serving fixed test values, no networking");
+    return;
 #endif
 
+    bridge::startLogCapture();
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+    bridge::netInit();
+    bridge::startConsole();
+
+    static bridge::App app(emulator);
     ESP_LOGI(TAG, "solar-node-wifi started");
+    app.run();
 }
