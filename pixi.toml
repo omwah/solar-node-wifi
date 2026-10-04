@@ -8,6 +8,7 @@ version = "0.1.0"
 [tasks]
 build = { cmd = "pio run -e xiao_esp32c3", description = "Build the XIAO ESP32-C3 firmware" }
 test = { cmd = "pio test -e native", description = "Run host unit tests (T1)" }
+driver-test = { cmd = "test/driver_harness/run.sh", description = "Run the stock Meshtastic SENxx driver against the emulator (T2)" }
 flash = { cmd = "pio run -e xiao_esp32c3 -t upload", description = "Flash the firmware over USB" }
 monitor = { cmd = "pio device monitor -e xiao_esp32c3", description = "Open the USB serial console" }
 clean = { cmd = "pio run -t clean", description = "Remove build outputs" }

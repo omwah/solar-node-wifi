@@ -469,11 +469,11 @@ actual I²C master with the actual driver (T3, T4).
 | Level | What | Proves |
 |---|---|---|
 | **T1 host unit** | C3 emulator logic (commands, CRC, encoding, staleness, mode machine) built as a PlatformIO `native` test env | Protocol and logic correctness |
-| **T2 driver-in-the-loop (host)** | Compile Meshtastic's real `SENXXSensor.cpp` + `ScanI2CTwoWire` probe code against a fake `TwoWire` connected to the T1 emulator, in a test harness outside the firmware tree | The stock driver accepts the emulator, with no firmware change |
+| **T2 driver-in-the-loop (host)** | Meshtastic's unmodified `SENXXSensor.cpp` (fetched at `727d8c3`) compiled against small host shims and a fake `TwoWire` routed to the emulator (`test/driver_harness/`, `pixi run driver-test`). The scan's single-byte register checks are covered by T1. | The stock driver probes, initialises and reads the emulator with no firmware change, logging no errors |
 | **T3 bench end-to-end** | Real C3 on the bench harness, plugged into the real Solar Node (USB-powered, serial log captured). Local Mosquitto + scripted publisher (`test/bench/publisher.py`) drive the payload and inject faults. A second Meshtastic device on USB runs `test/bench/receiver.py` (Meshtastic Python API), which asserts that the expected `AirQualityMetrics` values arrive over the mesh. | Real ESP32 slave timing against the real master; MQTT → I²C → mesh end to end; fault handling |
 | **T4 soak** | The same node on battery and solar with the final harness, logged for 72 h | Boot race, rail stability, power draw, and reboots of every kind |
 
-Run T1/T2 in CI via `pixi run test`. T3 runs from `pixi run bench` on the bench PC.
+Run T1/T2 in CI via `pixi run test` and `pixi run driver-test`. T3 runs from `pixi run bench` on the bench PC.
 
 ## 6. Power budget
 
@@ -515,7 +515,7 @@ speed, clock-gating unused peripherals, no LEDs, and maybe replacing the XIAO's 
 |---|---|---|
 | **0 — Hardware spike** | Build the bench Grove harness from the **draft `docs/wiring.md` §4.7.1** (level shifter fitted until the SDA/SCL voltage is known). Identify the battery + point for the battery-sense wire. Measure: Grove SDA/SCL idle voltage (3.3 V or 5 V?), Grove 5 V sag at a 350 mA pulse while the node transmits, nRF52 power-on → scan time, C3 idle current. Minimal C3 slave at `0x6B` answering the SEN66 probe with a **48-byte** reply. **D-3 checks:** (1) whether the Grove 5 V rail stays on during Meshtastic low-battery shutdown, and the battery voltage at which shutdown happens; (2) SDA/SCL levels while the node is shut down: they must stay high, or the GPIO wakeup will fire constantly; (3) the C3 in light sleep with GPIO wakeup answers the boot scan. | Node logs `SEN6X found` + `found sensor model SEN66` on 20/20 cold boots and 20/20 warm reboots; **20/20 detections from a light-sleeping C3** and no false wakes over 1 h of node shutdown, otherwise build and fit the battery-sense wire (§4.7.2); level shifter and capacitor decisions made and recorded in `docs/wiring.md`; Grove power confirmed or switched to a separate C3 cell (§4.7.1) |
 | **1 — Scaffold** ✓ | `pixi.toml`, `platformio.ini` (`seeed_xiao_esp32c3` + `native` test env), partition table, `sdkconfig.defaults`, CI workflow; Sensirion CRC-8 as the first tested module | `pixi run build`/`test` green |
-| **2 — Emulator** | Full §3/§3a contract; T1 + T2 | Stock `SENXXSensor` passes init + 100 read cycles in T2 |
+| **2 — Emulator** ✓ | Full §3/§3a contract in `lib/senxx`; T1 + T2 | Stock `SENXXSensor` passes init + 100 read cycles in T2 |
 | **3 — Poller & cache** | WiFi/SNTP/MQTT, payload parser, staleness, modes, serial CLI + `tools/configure.py`, `docs/mqtt_payload.md` + HA automation example | T3 end-to-end green; fault injection (broker down, bad auth, stale `ts`, malformed JSON) behaves as specified in §4.4; `NODE_DOWN` entry/exit on simulated node silence; `LOW_BATT` with a bench supply on the ADC pin |
 | **4 — Power** | Lower the floor; `tools/power_budget.py` with PVWatts + measured values | Measured floor ≤ 12 mA @ 3.3 V (stretch: 8 mA); budget report |
 | **5 — Remote management** | MQTT cmd/resp/state/log topics, persistent session, live session, OTA with rollback, TLS, Mosquitto ACL example, HA Discovery, `tools/remote.py` | A `set` queued while the C3 is offline is applied on the next poll; OTA of a good image succeeds and a deliberately broken image rolls back by itself; RAM headroom ≥ 40 KB during a TLS session |
