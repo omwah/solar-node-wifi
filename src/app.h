@@ -5,6 +5,7 @@
 #include "emulator.h"
 #include "mqtt_link.h"
 #include "nvs_store.h"
+#include "ota.h"
 #include "payload.h"
 #include "settings.h"
 
@@ -50,6 +51,7 @@ class App : public cli::Actions
     void publishState();
     void nodeDownSleep(uint64_t now);
     void maybeReboot();
+    void runPendingOta();
 
     senxx::Emulator &emu_;
     NvsStore store_;
@@ -79,6 +81,12 @@ class App : public cli::Actions
     bool pollNowRequested_ = false;
     bool rebootRequested_ = false;
     bool busLowLogged_ = false;
+
+    OtaVerifier otaVerifier_;
+    bool lastPollOk_ = false;
+    std::string otaUrl_;
+    std::string otaSha_;
+    std::string otaResult_;
 };
 
 } // namespace bridge

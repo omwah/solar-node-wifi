@@ -86,6 +86,7 @@ App::App(senxx::Emulator &emulator) : emu_(emulator), settings_(store_), dispatc
     if (settings_.flag("batt_enabled")) {
         batteryInit();
     }
+    otaVerifier_.begin(nowMs());
 }
 
 uint64_t App::nowMs()
@@ -153,6 +154,7 @@ void App::tick(uint64_t now)
     if (now - lastRefreshMs_ >= REFRESH_MS) {
         refreshMeasurement();
     }
+    otaVerifier_.update(now, controller_->nodeSeen(), lastPollOk_);
 }
 
 void App::poll(uint64_t now)
@@ -211,7 +213,9 @@ void App::poll(uint64_t now)
     if (!ok) {
         pollFailures_++;
     }
+    lastPollOk_ = lastPollOk_ || ok;
     controller_->onPollResult(nowMs(), ok ? modes::PollResult::Ok : modes::PollResult::NoData);
+    runPendingOta();
     publishState();
 
     if (controller_->keepConnected(nowMs())) {
@@ -233,6 +237,7 @@ void App::serveSession()
         }
         if (link_.takeCommand(msg, 100)) {
             handleMqttCommand(msg);
+            runPendingOta();
         }
         tick(now);
         handleConsole();
@@ -361,6 +366,11 @@ void App::status(JsonObject out)
     if (next != UINT64_MAX) {
         out["next_poll_s"] = next > now ? (next - now) / S : 0;
     }
+    if (otaVerifier_.pending()) {
+        out["ota"] = "pending verification";
+    } else if (!otaResult_.empty()) {
+        out["ota"] = otaResult_;
+    }
     out["free_heap"] = esp_get_free_heap_size();
     out["min_free_heap"] = esp_get_minimum_free_heap_size();
     int rssi = wifiRssi();
@@ -424,10 +434,44 @@ void App::log(size_t lines, JsonArray out)
     copyRecentLog(lines, out);
 }
 
-bool App::startOta(const std::string &, const std::string &, std::string &error)
+bool App::startOta(const std::string &url, const std::string &sha256, std::string &error)
 {
-    error = "OTA is not available in this build";
-    return false;
+    if (controller_->mode(nowMs()) == modes::Mode::LowBatt) {
+        error = "battery low";
+        return false;
+    }
+    if (otaVerifier_.pending()) {
+        error = "current image not yet verified";
+        return false;
+    }
+    if (!link_.connected()) {
+        error = "OTA needs a broker connection (send it over MQTT)";
+        return false;
+    }
+    // Runs after the reply is published, while WiFi is still up.
+    otaUrl_ = url;
+    otaSha_ = sha256;
+    return true;
+}
+
+void App::runPendingOta()
+{
+    if (otaUrl_.empty()) {
+        return;
+    }
+    std::string url = otaUrl_;
+    std::string sha = otaSha_;
+    otaUrl_.clear();
+    otaSha_.clear();
+    ESP_LOGI(TAG, "OTA from %s", url.c_str());
+    std::string error;
+    if (otaInstall(url, sha, error)) {
+        otaResult_ = "installed; rebooting";
+        publishState();
+        rebootRequested_ = true;
+    } else {
+        otaResult_ = "failed: " + error;
+    }
 }
 
 void App::maybeReboot()
