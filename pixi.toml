@@ -13,11 +13,17 @@ flash = { cmd = "pio run -e xiao_esp32c3 -t upload", description = "Flash the fi
 flash-phase0 = { cmd = "pio run -e xiao_esp32c3_phase0 -t upload", description = "Flash the Phase 0 bench build (fixed test values)" }
 monitor = { cmd = "pio device monitor -e xiao_esp32c3", description = "Open the USB serial console" }
 clean = { cmd = "pio run -t clean", description = "Remove build outputs" }
+configure = { cmd = "python tools/configure.py", description = "Configure the bridge over USB serial" }
+remote = { cmd = "python tools/remote.py", description = "Manage a deployed bridge over MQTT" }
+test-tools = { cmd = "pytest -q test/tools", description = "Unit tests for the host tools" }
 
 [dependencies]
 python = "3.12.*"
 platformio = ">=6.2.0,<7"
 pip = ">=26.2.1,<27"
+pyserial = ">=3.5,<4"
+paho-mqtt = ">=2.1.0,<3"
+pytest = ">=9.1.1,<10"
 
 # Host compiler for the native test env; macOS uses the system clang.
 [target.linux-64.dependencies]

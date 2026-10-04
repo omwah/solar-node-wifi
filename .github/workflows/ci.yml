@@ -29,6 +29,9 @@ jobs:
       - name: Host unit tests
         run: pixi run test
 
+      - name: Host tool tests
+        run: pixi run test-tools
+
       - name: Driver-in-the-loop test
         run: pixi run driver-test
 
