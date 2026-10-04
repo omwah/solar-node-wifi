@@ -212,10 +212,14 @@ bool MqttLink::takeCommand(std::string &out, uint32_t waitMs)
 
 bool MqttLink::publish(const char *suffix, const std::string &payload, bool retain, int qos)
 {
+    return publishAbsolute(impl_->prefix + suffix, payload, retain, qos);
+}
+
+bool MqttLink::publishAbsolute(const std::string &topic, const std::string &payload, bool retain, int qos)
+{
     if (!connected()) {
         return false;
     }
-    std::string topic = impl_->prefix + suffix;
     return esp_mqtt_client_publish(impl_->client, topic.c_str(), payload.data(), static_cast<int>(payload.size()), qos,
                                    retain ? 1 : 0) >= 0;
 }

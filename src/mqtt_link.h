@@ -29,6 +29,8 @@ class MqttLink
     bool takeCommand(std::string &out, uint32_t waitMs);
 
     bool publish(const char *suffix, const std::string &payload, bool retain, int qos);
+    // Topic outside this node's prefix (Home Assistant discovery).
+    bool publishAbsolute(const std::string &topic, const std::string &payload, bool retain, int qos);
 
     struct Impl;
 

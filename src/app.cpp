@@ -1,6 +1,7 @@
 #include "app.h"
 
 #include "battery.h"
+#include "discovery.h"
 #include "console.h"
 #include "i2c_slave.h"
 #include "log_buffer.h"
@@ -200,6 +201,8 @@ void App::poll(uint64_t now)
                                                       : modes::PollResult::ConnectFailed);
     }
 
+    publishDiscovery();
+
     std::string msg;
     bool gotTelemetry = link_.takeTelemetry(msg, TELEMETRY_WAIT_MS);
     if (gotTelemetry) {
@@ -332,6 +335,19 @@ void App::refreshMeasurement()
     emu_.setMeasurement(t.measurement);
 }
 
+void App::publishDiscovery()
+{
+    if (discoveryPublished_ || !settings_.flag("ha_discovery")) {
+        return;
+    }
+    bool ok = true;
+    for (const discovery::Message &m :
+         discovery::build(settings_.str("node_id"), esp_app_get_description()->version, settings_.flag("batt_enabled"))) {
+        ok &= link_.publishAbsolute(m.topic, m.payload, true, 1);
+    }
+    discoveryPublished_ = ok;
+}
+
 void App::publishState()
 {
     lastStateMs_ = nowMs();
@@ -406,6 +422,7 @@ void App::status(JsonObject out)
 void App::applySettings()
 {
     controller_->setConfig(modeConfig());
+    discoveryPublished_ = false; // node_id or ha_discovery may have changed
     if (settings_.flag("batt_enabled")) {
         batteryInit();
     }

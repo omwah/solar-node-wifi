@@ -30,6 +30,7 @@ const KeyInfo KEYS[] = {
     {"node_silence_s", Type::Uint, "10800", false, 600, 86400, "Node silence before NODE_DOWN (3x its interval)"},
     {"heartbeat_s", Type::Uint, "21600", false, 3600, 86400, "Poll interval while NODE_DOWN"},
     {"session_cap_s", Type::Uint, "7200", false, 300, 7200, "Longest live management session"},
+    {"ha_discovery", Type::Bool, "false", false, 0, 1, "Publish Home Assistant MQTT Discovery configs"},
     {"batt_enabled", Type::Bool, "false", false, 0, 1, "Battery-sense wire fitted"},
     {"batt_low_v", Type::Float, "3.40", false, 3.0, 4.2, "Enter LOW_BATT below this"},
     {"batt_resume_v", Type::Float, "3.65", false, 3.0, 4.2, "Leave LOW_BATT at or above this"},

@@ -17,11 +17,15 @@ topic read  solarnode/site-01/cmd
 topic write solarnode/site-01/resp
 topic write solarnode/site-01/state
 topic write solarnode/site-01/log
+# Only with `set ha_discovery true`:
+# topic write homeassistant/+/solarnode_site-01_+/config
 
 # Home Assistant: publishes telemetry, reads state (for dashboards and discovery).
 user homeassistant
 topic write solarnode/+/telemetry
 topic read  solarnode/+/state
+# Only for the discovery buttons (poll now, session, reboot):
+# topic write solarnode/+/cmd
 
 # Operator (tools/remote.py): the only account allowed to send commands.
 user solarnode-admin

@@ -52,6 +52,7 @@ class App : public cli::Actions
     void nodeDownSleep(uint64_t now);
     void maybeReboot();
     void runPendingOta();
+    void publishDiscovery();
 
     senxx::Emulator &emu_;
     NvsStore store_;
@@ -87,6 +88,7 @@ class App : public cli::Actions
     std::string otaUrl_;
     std::string otaSha_;
     std::string otaResult_;
+    bool discoveryPublished_ = false;
 };
 
 } // namespace bridge
