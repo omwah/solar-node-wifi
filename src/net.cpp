@@ -27,42 +27,72 @@ constexpr time_t VALID_AFTER = 1700000000;
 EventGroupHandle_t events = nullptr;
 esp_netif_t *netif = nullptr;
 bool started = false;
+bool connecting = false; // retry association only while wifiConnect() is waiting
 bool sntpStarted = false;
+
+// Static addressing, applied once the station associates (as in ESP-IDF's static_ip example).
+struct {
+    bool enabled = false;
+    esp_netif_ip_info_t info = {};
+    esp_netif_dns_info_t dns = {};
+    bool hasDns = false;
+} staticIp;
+
+void applyStaticIp()
+{
+    esp_netif_dhcpc_stop(netif);
+    if (esp_netif_set_ip_info(netif, &staticIp.info) != ESP_OK) {
+        ESP_LOGW(TAG, "static IP rejected");
+        xEventGroupSetBits(events, FAILED);
+        return;
+    }
+    if (staticIp.hasDns) {
+        esp_netif_set_dns_info(netif, ESP_NETIF_DNS_MAIN, &staticIp.dns);
+    }
+    xEventGroupSetBits(events, GOT_IP);
+}
 
 void onEvent(void *, esp_event_base_t base, int32_t id, void *)
 {
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
+    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_CONNECTED) {
+        if (staticIp.enabled) {
+            applyStaticIp();
+        }
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
-        xEventGroupSetBits(events, FAILED);
+        if (connecting) {
+            esp_wifi_connect();
+        } else {
+            xEventGroupSetBits(events, FAILED);
+        }
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         xEventGroupSetBits(events, GOT_IP);
     }
 }
 
-bool applyStaticIp(const settings::Settings &s)
+bool loadStaticIp(const settings::Settings &s)
 {
     std::string ip = s.str("ip");
-    if (ip.empty()) {
+    staticIp.enabled = !ip.empty();
+    if (!staticIp.enabled) {
         esp_netif_dhcpc_start(netif); // harmless if already running
         return true;
     }
-    esp_netif_dhcpc_stop(netif);
-    esp_netif_ip_info_t info = {};
-    info.ip.addr = ipaddr_addr(ip.c_str());
-    info.gw.addr = ipaddr_addr(s.str("gateway").c_str());
-    info.netmask.addr = ipaddr_addr(s.str("netmask").c_str());
-    if (esp_netif_set_ip_info(netif, &info) != ESP_OK) {
+    staticIp.info = {};
+    staticIp.info.ip.addr = ipaddr_addr(ip.c_str());
+    staticIp.info.gw.addr = ipaddr_addr(s.str("gateway").c_str());
+    staticIp.info.netmask.addr = ipaddr_addr(s.str("netmask").c_str());
+    if (staticIp.info.ip.addr == IPADDR_NONE || staticIp.info.netmask.addr == IPADDR_NONE) {
         return false;
     }
     std::string dns = s.str("dns");
-    if (!dns.empty()) {
-        esp_netif_dns_info_t d = {};
-        d.ip.u_addr.ip4.addr = ipaddr_addr(dns.c_str());
-        d.ip.type = ESP_IPADDR_TYPE_V4;
-        esp_netif_set_dns_info(netif, ESP_NETIF_DNS_MAIN, &d);
+    staticIp.hasDns = !dns.empty();
+    if (staticIp.hasDns) {
+        staticIp.dns = {};
+        staticIp.dns.ip.u_addr.ip4.addr = ipaddr_addr(dns.c_str());
+        staticIp.dns.ip.type = ESP_IPADDR_TYPE_V4;
     }
-    // With a static address no IP event fires; connecting is enough.
     return true;
 }
 
@@ -94,8 +124,7 @@ bool wifiConnect(const settings::Settings &s, uint32_t timeoutMs)
     if (esp_wifi_set_mode(WIFI_MODE_STA) != ESP_OK || esp_wifi_set_config(WIFI_IF_STA, &wc) != ESP_OK) {
         return false;
     }
-    bool staticIp = !s.str("ip").empty();
-    if (!applyStaticIp(s)) {
+    if (!loadStaticIp(s)) {
         ESP_LOGW(TAG, "bad static IP settings");
         return false;
     }
@@ -103,20 +132,9 @@ bool wifiConnect(const settings::Settings &s, uint32_t timeoutMs)
         return false;
     }
     started = true;
-
-    if (staticIp) {
-        // Wait for association only.
-        TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeoutMs);
-        wifi_ap_record_t ap;
-        while (xTaskGetTickCount() < deadline) {
-            if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
-                return true;
-            }
-            vTaskDelay(pdMS_TO_TICKS(50));
-        }
-        return false;
-    }
+    connecting = true;
     EventBits_t bits = xEventGroupWaitBits(events, GOT_IP, pdFALSE, pdFALSE, pdMS_TO_TICKS(timeoutMs));
+    connecting = false;
     return (bits & GOT_IP) != 0;
 }
 

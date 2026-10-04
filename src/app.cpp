@@ -126,6 +126,12 @@ payload::ParseConfig App::parseConfig() const
         handleConsole();
         maybeReboot();
 
+        if (!settings_.complete()) {
+            // Commissioning without WiFi/broker settings: wait for them over serial.
+            // Not counted as polls, so the daily WiFi cap stays untouched.
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
         bool lowBatt = controller_->mode(now) == modes::Mode::LowBatt;
         if ((pollNowRequested_ && !lowBatt) || controller_->pollDue(now)) {
             pollNowRequested_ = false;
@@ -170,10 +176,6 @@ void App::poll(uint64_t now)
         wifiStop();
     };
 
-    if (!settings_.complete()) {
-        controller_->onPollResult(now, modes::PollResult::NoData); // waiting for setup over serial
-        return;
-    }
     if (settings_.flag("batt_enabled")) {
         batteryV_ = batteryVolts(settings_.f32("batt_cal"));
         controller_->onBattery(now, batteryV_);
@@ -221,7 +223,8 @@ void App::poll(uint64_t now)
         handleMqttCommand(msg);
     }
 
-    bool ok = gotTelemetry && payloadOk_;
+    // Without a set clock every value is served as unknown, so the poll hasn't delivered.
+    bool ok = gotTelemetry && payloadOk_ && clockValid();
     if (!ok) {
         pollFailures_++;
         publishLogNext_ = true;
