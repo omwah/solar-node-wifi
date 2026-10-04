@@ -10,6 +10,7 @@ readings to the mesh as standard air-quality telemetry.
   [docs/ha_automation.yaml](docs/ha_automation.yaml)
 - Wiring: [docs/wiring.md](docs/wiring.md)
 - Solar Node settings: [docs/node_config.md](docs/node_config.md)
+- Bench testing and pre-deployment checklist: [docs/bench_testing.md](docs/bench_testing.md)
 
 ## Build and test
 

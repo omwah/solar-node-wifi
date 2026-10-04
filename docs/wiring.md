@@ -4,7 +4,8 @@ Two parts: the **Grove harness** (always built) and the **battery-sense wire** (
 if the node-activity watchdog fails its Phase 0 test). Take every reading in the
 checklists **before** the XIAO is connected for the first time.
 
-Items marked *Phase 0* are confirmed on the bench and recorded here.
+Items marked *Phase 0* are measured with the steps in `docs/bench_testing.md`; copy the
+results here once that guide's results sheet is filled in.
 
 | Phase 0 result | Value |
 |---|---|

@@ -477,7 +477,7 @@ actual I²C master with the actual driver (T3, T4).
 | **T3 bench end-to-end** | Real C3 on the bench harness, plugged into the real Solar Node (USB-powered, serial log captured). Local Mosquitto + scripted publisher (`test/bench/publisher.py`) drive the payload and inject faults. A second Meshtastic device on USB runs `test/bench/receiver.py` (Meshtastic Python API), which asserts that the expected `AirQualityMetrics` values arrive over the mesh. | Real ESP32 slave timing against the real master; MQTT → I²C → mesh end to end; fault handling |
 | **T4 soak** | The same node on battery and solar with the final harness, logged for 72 h | Boot race, rail stability, power draw, and reboots of every kind |
 
-Run T1/T2 in CI via `pixi run test` and `pixi run driver-test`. T3 runs from `pixi run bench` on the bench PC.
+Run T1/T2 in CI via `pixi run test` and `pixi run driver-test`. T3 runs on the bench PC with the `bench` environment (`pixi run -e bench …`), following `docs/bench_testing.md`.
 
 ## 6. Power budget
 
@@ -517,7 +517,7 @@ speed, clock-gating unused peripherals, no LEDs, and maybe replacing the XIAO's 
 
 | Phase | Work | Exit gate |
 |---|---|---|
-| **0 — Hardware spike** | Build the bench Grove harness from the **draft `docs/wiring.md` §4.7.1** (level shifter fitted until the SDA/SCL voltage is known). Identify the battery + point for the battery-sense wire. Measure: Grove SDA/SCL idle voltage (3.3 V or 5 V?), Grove 5 V sag at a 350 mA pulse while the node transmits, nRF52 power-on → scan time, C3 idle current. Flash the Phase 0 build (`pixi run flash-phase0`): the full SEN66 emulator with fixed test values. **D-3 checks:** (1) whether the Grove 5 V rail stays on during Meshtastic low-battery shutdown, and the battery voltage at which shutdown happens; (2) SDA/SCL levels while the node is shut down: they must stay high, or the GPIO wakeup will fire constantly; (3) the C3 in light sleep with GPIO wakeup answers the boot scan. | Node logs `SEN6X found` + `found sensor model SEN66` on 20/20 cold boots and 20/20 warm reboots; **20/20 detections from a light-sleeping C3** and no false wakes over 1 h of node shutdown, otherwise build and fit the battery-sense wire (§4.7.2); level shifter and capacitor decisions made and recorded in `docs/wiring.md`; Grove power confirmed or switched to a separate C3 cell (§4.7.1) |
+| **0 — Hardware spike** | Step-by-step procedure and results sheet: `docs/bench_testing.md`. Build the bench Grove harness from the **draft `docs/wiring.md` §4.7.1** (level shifter fitted until the SDA/SCL voltage is known). Identify the battery + point for the battery-sense wire. Measure: Grove SDA/SCL idle voltage (3.3 V or 5 V?), Grove 5 V sag at a 350 mA pulse while the node transmits, nRF52 power-on → scan time, C3 idle current. Flash the Phase 0 build (`pixi run flash-phase0`): the full SEN66 emulator with fixed test values. **D-3 checks:** (1) whether the Grove 5 V rail stays on during Meshtastic low-battery shutdown, and the battery voltage at which shutdown happens; (2) SDA/SCL levels while the node is shut down: they must stay high, or the GPIO wakeup will fire constantly; (3) the C3 in light sleep with GPIO wakeup answers the boot scan. | Node logs `SEN6X found` + `found sensor model SEN66` on 20/20 cold boots and 20/20 warm reboots; **20/20 detections from a light-sleeping C3** and no false wakes over 1 h of node shutdown, otherwise build and fit the battery-sense wire (§4.7.2); level shifter and capacitor decisions made and recorded in `docs/wiring.md`; Grove power confirmed or switched to a separate C3 cell (§4.7.1) |
 | **1 — Scaffold** ✓ | `pixi.toml`, `platformio.ini` (`seeed_xiao_esp32c3` + `native` test env), partition table, `sdkconfig.defaults`, CI workflow; Sensirion CRC-8 as the first tested module | `pixi run build`/`test` green |
 | **2 — Emulator** ✓ | Full §3/§3a contract in `lib/senxx`; T1 + T2 | Stock `SENXXSensor` passes init + 100 read cycles in T2 |
 | **3 — Poller & cache** (code ✓; hardware gate open) | WiFi/SNTP/MQTT, payload parser, staleness, modes, serial CLI + `tools/configure.py`, `docs/mqtt_payload.md` + HA automation example | T3 end-to-end green; fault injection (broker down, bad auth, stale `ts`, malformed JSON) behaves as specified in §4.4; `NODE_DOWN` entry/exit on simulated node silence; `LOW_BATT` with a bench supply on the ADC pin |
@@ -547,7 +547,6 @@ Not yet verified, because it needs hardware or services this environment can't r
 - The HA blueprint inside a real Home Assistant (its template is tested only with mocks).
 - NREL PVWatts from `tools/power_budget.py` (the API host was unreachable; the offline
   estimate works).
-- The CI workflow on GitHub (the repository has no remote yet).
 
 ## 8. Risk register
 
