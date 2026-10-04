@@ -211,7 +211,7 @@ the firmware forwards what it gets.
 | `NORMAL` | Default | Poll at `poll_interval` |
 | `BACKOFF` | Connect/auth/parse failure | Interval doubles on each failure up to 6 h; resets on the first success. Auth errors jump straight to the maximum. |
 | `SESSION` | `debug: true` in a valid payload, or a `session` command | WiFi and MQTT stay connected for interactive management; ends at `debug_until`, the requested length, or the 2 h cap |
-| `NODE_DOWN` | No I²C traffic from the node for `node_silence_s` (§4.6) | WiFi off, light sleep, wake on an I²C line edge; any node traffic → `NORMAL` |
+| `NODE_DOWN` | No I²C traffic from the node for `node_silence_s` (§4.6) | Light sleep, wake on an I²C line edge; one heartbeat poll every `node_down_heartbeat_s` (default 6 h) so the C3 stays remotely reachable; any node traffic → `NORMAL` |
 | `LOW_BATT` | Only if the battery-sense wire is fitted: battery < `batt_low_v` (§4.6) | Same as `NODE_DOWN`; leaves only when the battery is ≥ `batt_resume_v` **and** node traffic is seen |
 
 Backstop: a hard cap on WiFi starts per day (default 400), whatever the mode.
@@ -280,6 +280,9 @@ shuts down, this section is moot and both mechanisms stay disabled.
   `NODE_DOWN`.
 - In `NODE_DOWN`: WiFi off, GPIO wakeup set on SCL/SDA going low, then automatic light sleep
   (~0.15 mA at 3.3 V for the C3; the boost converter's and regulator's own idle draw then dominate).
+- One heartbeat poll every 6 h (~1–3 J each, < 0.01 Wh/day) keeps the `state` topic current and lets
+  queued commands through. This matters most when the node never detected the C3: the operator sees
+  `node_seen: false` and can still reach it. `LOW_BATT` (battery-sense wire) blocks even the heartbeat.
 - When the node reboots, its boot scan probes about 99 addresses before `0x6B`, roughly 10 ms at
   100 kHz. The C3 wakes in about 1 ms and must be ready to ACK and answer `GET_PRODUCT_NAME`.
 - First transaction to `0x6B` → back to `NORMAL`, with the normal ≥ 10 s delay before WiFi (§4.1).
@@ -517,7 +520,7 @@ speed, clock-gating unused peripherals, no LEDs, and maybe replacing the XIAO's 
 | **0 — Hardware spike** | Build the bench Grove harness from the **draft `docs/wiring.md` §4.7.1** (level shifter fitted until the SDA/SCL voltage is known). Identify the battery + point for the battery-sense wire. Measure: Grove SDA/SCL idle voltage (3.3 V or 5 V?), Grove 5 V sag at a 350 mA pulse while the node transmits, nRF52 power-on → scan time, C3 idle current. Flash the Phase 0 build (`pixi run flash-phase0`): the full SEN66 emulator with fixed test values. **D-3 checks:** (1) whether the Grove 5 V rail stays on during Meshtastic low-battery shutdown, and the battery voltage at which shutdown happens; (2) SDA/SCL levels while the node is shut down: they must stay high, or the GPIO wakeup will fire constantly; (3) the C3 in light sleep with GPIO wakeup answers the boot scan. | Node logs `SEN6X found` + `found sensor model SEN66` on 20/20 cold boots and 20/20 warm reboots; **20/20 detections from a light-sleeping C3** and no false wakes over 1 h of node shutdown, otherwise build and fit the battery-sense wire (§4.7.2); level shifter and capacitor decisions made and recorded in `docs/wiring.md`; Grove power confirmed or switched to a separate C3 cell (§4.7.1) |
 | **1 — Scaffold** ✓ | `pixi.toml`, `platformio.ini` (`seeed_xiao_esp32c3` + `native` test env), partition table, `sdkconfig.defaults`, CI workflow; Sensirion CRC-8 as the first tested module | `pixi run build`/`test` green |
 | **2 — Emulator** ✓ | Full §3/§3a contract in `lib/senxx`; T1 + T2 | Stock `SENXXSensor` passes init + 100 read cycles in T2 |
-| **3 — Poller & cache** | WiFi/SNTP/MQTT, payload parser, staleness, modes, serial CLI + `tools/configure.py`, `docs/mqtt_payload.md` + HA automation example | T3 end-to-end green; fault injection (broker down, bad auth, stale `ts`, malformed JSON) behaves as specified in §4.4; `NODE_DOWN` entry/exit on simulated node silence; `LOW_BATT` with a bench supply on the ADC pin |
+| **3 — Poller & cache** (host logic ✓: `lib/payload`, `lib/modes`) | WiFi/SNTP/MQTT, payload parser, staleness, modes, serial CLI + `tools/configure.py`, `docs/mqtt_payload.md` + HA automation example | T3 end-to-end green; fault injection (broker down, bad auth, stale `ts`, malformed JSON) behaves as specified in §4.4; `NODE_DOWN` entry/exit on simulated node silence; `LOW_BATT` with a bench supply on the ADC pin |
 | **4 — Power** | Lower the floor; `tools/power_budget.py` with PVWatts + measured values | Measured floor ≤ 12 mA @ 3.3 V (stretch: 8 mA); budget report |
 | **5 — Remote management** | MQTT cmd/resp/state/log topics, persistent session, live session, OTA with rollback, TLS, Mosquitto ACL example, HA Discovery, `tools/remote.py` | A `set` queued while the C3 is offline is applied on the next poll; OTA of a good image succeeds and a deliberately broken image rolls back by itself; RAM headroom ≥ 40 KB during a TLS session |
 | **6 — Field** | Final `docs/wiring.md` (photos, measured values, final BOM); T4 72 h soak with the final harness, then roof deploy | Someone other than the author builds a harness from the guide and passes the pre-connection checklist; no missed detections, no node resets attributable to the C3 |
