@@ -11,3 +11,6 @@ sdkconfig.*
 .vscode/
 # ESP-IDF component manager downloads (dependencies.lock pins them)
 managed_components/
+# Python caches
+__pycache__/
+.pytest_cache/

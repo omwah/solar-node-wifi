@@ -29,3 +29,26 @@ pytest = ">=9.1.1,<10"
 [target.linux-64.dependencies]
 gcc = ">=16.2.0,<16.3"
 gxx = ">=16.2.0,<16.3"
+
+# T3 bench tools in their own environment: the Meshtastic Python API needs a newer
+# tabulate than PlatformIO allows.
+[feature.bench.dependencies]
+python = "3.12.*"
+paho-mqtt = ">=2.1.0,<3"
+pytest = ">=9.1.1,<10"
+
+[feature.bench.target.linux-64.dependencies]
+mosquitto = ">=2.0.20,<3"
+
+[feature.bench.pypi-dependencies]
+meshtastic = ">=2.7,<3"
+
+[feature.bench.tasks]
+broker = { cmd = "$CONDA_PREFIX/sbin/mosquitto -c test/bench/mosquitto.conf", description = "Local broker for the bench (T3)" }
+publish = { cmd = "python test/bench/publisher.py", description = "Synthetic HA publisher (T3)" }
+receive = { cmd = "python test/bench/receiver.py", description = "Check AirQualityMetrics arriving over the mesh (T3)" }
+test-bench = { cmd = "pytest -q test/bench", description = "Broker-backed tests of the host tools and publisher" }
+
+[environments]
+bench = { features = ["bench"], no-default-feature = true }
+

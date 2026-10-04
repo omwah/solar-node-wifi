@@ -24,13 +24,16 @@ jobs:
           key: platformio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
 
       - name: Install environment
-        run: pixi install --locked
+        run: pixi install --locked --all
 
       - name: Host unit tests
         run: pixi run test
 
       - name: Host tool tests
         run: pixi run test-tools
+
+      - name: Broker-backed tool tests
+        run: pixi run -e bench test-bench
 
       - name: Driver-in-the-loop test
         run: pixi run driver-test
