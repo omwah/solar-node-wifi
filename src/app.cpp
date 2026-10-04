@@ -164,6 +164,7 @@ void App::poll(uint64_t now)
     polls_++;
     auto fail = [&](modes::PollResult r) {
         pollFailures_++;
+        publishLogNext_ = true;
         controller_->onPollResult(nowMs(), r);
         link_.disconnect();
         wifiStop();
@@ -202,6 +203,14 @@ void App::poll(uint64_t now)
     }
 
     publishDiscovery();
+    if (publishLogNext_) {
+        // Recent log lines explain the earlier failure.
+        JsonDocument logDoc;
+        copyRecentLog(20, logDoc.to<JsonArray>());
+        std::string out;
+        serializeJson(logDoc, out);
+        publishLogNext_ = !link_.publish("log", out, false, 0);
+    }
 
     std::string msg;
     bool gotTelemetry = link_.takeTelemetry(msg, TELEMETRY_WAIT_MS);
@@ -215,6 +224,7 @@ void App::poll(uint64_t now)
     bool ok = gotTelemetry && payloadOk_;
     if (!ok) {
         pollFailures_++;
+        publishLogNext_ = true;
     }
     lastPollOk_ = lastPollOk_ || ok;
     controller_->onPollResult(nowMs(), ok ? modes::PollResult::Ok : modes::PollResult::NoData);

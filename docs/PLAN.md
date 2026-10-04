@@ -520,11 +520,34 @@ speed, clock-gating unused peripherals, no LEDs, and maybe replacing the XIAO's 
 | **0 — Hardware spike** | Build the bench Grove harness from the **draft `docs/wiring.md` §4.7.1** (level shifter fitted until the SDA/SCL voltage is known). Identify the battery + point for the battery-sense wire. Measure: Grove SDA/SCL idle voltage (3.3 V or 5 V?), Grove 5 V sag at a 350 mA pulse while the node transmits, nRF52 power-on → scan time, C3 idle current. Flash the Phase 0 build (`pixi run flash-phase0`): the full SEN66 emulator with fixed test values. **D-3 checks:** (1) whether the Grove 5 V rail stays on during Meshtastic low-battery shutdown, and the battery voltage at which shutdown happens; (2) SDA/SCL levels while the node is shut down: they must stay high, or the GPIO wakeup will fire constantly; (3) the C3 in light sleep with GPIO wakeup answers the boot scan. | Node logs `SEN6X found` + `found sensor model SEN66` on 20/20 cold boots and 20/20 warm reboots; **20/20 detections from a light-sleeping C3** and no false wakes over 1 h of node shutdown, otherwise build and fit the battery-sense wire (§4.7.2); level shifter and capacitor decisions made and recorded in `docs/wiring.md`; Grove power confirmed or switched to a separate C3 cell (§4.7.1) |
 | **1 — Scaffold** ✓ | `pixi.toml`, `platformio.ini` (`seeed_xiao_esp32c3` + `native` test env), partition table, `sdkconfig.defaults`, CI workflow; Sensirion CRC-8 as the first tested module | `pixi run build`/`test` green |
 | **2 — Emulator** ✓ | Full §3/§3a contract in `lib/senxx`; T1 + T2 | Stock `SENXXSensor` passes init + 100 read cycles in T2 |
-| **3 — Poller & cache** (host logic ✓: `lib/payload`, `lib/modes`) | WiFi/SNTP/MQTT, payload parser, staleness, modes, serial CLI + `tools/configure.py`, `docs/mqtt_payload.md` + HA automation example | T3 end-to-end green; fault injection (broker down, bad auth, stale `ts`, malformed JSON) behaves as specified in §4.4; `NODE_DOWN` entry/exit on simulated node silence; `LOW_BATT` with a bench supply on the ADC pin |
-| **4 — Power** | Lower the floor; `tools/power_budget.py` with PVWatts + measured values | Measured floor ≤ 12 mA @ 3.3 V (stretch: 8 mA); budget report |
-| **5 — Remote management** | MQTT cmd/resp/state/log topics, persistent session, live session, OTA with rollback, TLS, Mosquitto ACL example, HA Discovery, `tools/remote.py` | A `set` queued while the C3 is offline is applied on the next poll; OTA of a good image succeeds and a deliberately broken image rolls back by itself; RAM headroom ≥ 40 KB during a TLS session |
+| **3 — Poller & cache** (code ✓; hardware gate open) | WiFi/SNTP/MQTT, payload parser, staleness, modes, serial CLI + `tools/configure.py`, `docs/mqtt_payload.md` + HA automation example | T3 end-to-end green; fault injection (broker down, bad auth, stale `ts`, malformed JSON) behaves as specified in §4.4; `NODE_DOWN` entry/exit on simulated node silence; `LOW_BATT` with a bench supply on the ADC pin |
+| **4 — Power** (tool ✓; measurements open) | Lower the floor; `tools/power_budget.py` with PVWatts + measured values | Measured floor ≤ 12 mA @ 3.3 V (stretch: 8 mA); budget report |
+| **5 — Remote management** (code ✓; hardware gate open) | MQTT cmd/resp/state/log topics, persistent session, live session, OTA with rollback, TLS, Mosquitto ACL example, HA Discovery, `tools/remote.py` | A `set` queued while the C3 is offline is applied on the next poll; OTA of a good image succeeds and a deliberately broken image rolls back by itself; RAM headroom ≥ 40 KB during a TLS session |
 | **6 — Field** | Final `docs/wiring.md` (photos, measured values, final BOM); T4 72 h soak with the final harness, then roof deploy | Someone other than the author builds a harness from the guide and passes the pre-connection checklist; no missed detections, no node resets attributable to the C3 |
 | **7 — Optional** | ESP32 secure boot with signed OTA images | — |
+
+### 7.1 Implementation status
+
+All software for Phases 1–5 is written and builds; everything that can run without
+hardware is tested.
+
+| Check | Runs | Covers |
+|---|---|---|
+| `pixi run test` | host, CI | CRC, encoding, emulator contract, payload parser, mode controller, settings, command set, discovery |
+| `pixi run driver-test` | host, CI | Meshtastic's stock SENXX driver against the emulator (T2) |
+| `pixi run test-tools` | host, CI | shared command module, power budget maths |
+| `pixi run -e bench test-bench` | host, CI | `remote.py` and the publisher against a real Mosquitto broker; the HA blueprint template rendered with mocked HA functions |
+| `pixi run build` | host, CI | firmware for the XIAO ESP32-C3 |
+
+Not yet verified, because it needs hardware or services this environment can't reach:
+
+- Every hardware gate: Phase 0 measurements, the ESP32-C3 I²C slave against the real nRF52
+  (clock stretching, the 48-byte reply), `NODE_DOWN` light sleep and GPIO wake, WiFi/MQTT/SNTP
+  on the device, OTA and rollback on the device, the battery ADC.
+- The HA blueprint inside a real Home Assistant (its template is tested only with mocks).
+- NREL PVWatts from `tools/power_budget.py` (the API host was unreachable; the offline
+  estimate works).
+- The CI workflow on GitHub (the repository has no remote yet).
 
 ## 8. Risk register
 

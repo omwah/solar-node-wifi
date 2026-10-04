@@ -89,6 +89,7 @@ class App : public cli::Actions
     std::string otaSha_;
     std::string otaResult_;
     bool discoveryPublished_ = false;
+    bool publishLogNext_ = false; // set by a failed poll
 };
 
 } // namespace bridge
