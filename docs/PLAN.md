@@ -15,7 +15,7 @@ here were checked against `meshtastic/firmware` @ `727d8c3`.
 |---|---|---|
 | REQ-1 | **Bridge.** A XIAO ESP32-C3 delivers Home Assistant telemetry to a SenseCAP Solar Node P1-Pro running **stock, unmodified Meshtastic**, which broadcasts it as standard `AirQualityMetrics` telemetry on the default channel. | §2.4, §4.8 |
 | REQ-2 | **Interface.** The C3 connects to the node's Grove port and emulates a **Sensirion SEN66 at I²C address `0x6B`**. | §2.1, §3, §3a |
-| REQ-3 | **Build.** PlatformIO project; dependencies and tasks managed with **Pixi**. | §7 Phase 1 |
+| REQ-3 | **Build.** PlatformIO project on ESP-IDF; dependencies and tasks managed with **Pixi**. | §4.9 |
 | REQ-4 | **Data source.** One retained JSON message on a **Mosquitto** broker, published by **Home Assistant** from the **AirGradient Open Air** and **Tempest** devices, using a generic, prefix-stripping publisher. | §4.2, `docs/mqtt_payload.md` |
 | REQ-5 | **Fields.** PM1/2.5/4/10, CO2, VOC index, NOx index (AirGradient); temperature, humidity (Tempest). Missing or stale values are reported as unknown, never as zero or as an old value. | §2.3, §4.2 |
 | REQ-6 | **Power.** The C3's I²C slave is always on; WiFi runs only during polls; the idle floor is minimised. The system must sustain itself on the node's solar and battery budget, and the C3 must not drain the node's battery. | §2.2, §4.3, §4.6, §6 |
@@ -292,7 +292,7 @@ shuts down, this section is moot and both mechanisms stay disabled.
 - Hardware: a 1 MΩ / 1 MΩ divider from the node's battery + to XIAO `D1` (GPIO3, ADC1), with 100 nF from the
   pin to GND. Max 4.2 V → 2.1 V at the pin; divider drain ≈ 2 µA. Avoid `D0`/GPIO2 (a boot-strapping
   pin). Shared GND through Grove.
-- Firmware (always built, enabled by `batt_adc_enabled`): a calibrated ADC reading (`esp_adc_cal`, 11 dB,
+- Firmware (always built, enabled by `batt_adc_enabled`): a calibrated ADC reading (`esp_adc` oneshot + `adc_cali`, 12 dB attenuation,
   16-sample average) every 60 s and before every WiFi start. Below `batt_low_v` (default **3.40 V**)
   → `LOW_BATT`. Resume needs ≥ `batt_resume_v` (default **3.65 V**, hysteresis) **and** node traffic.
   Thresholds to be set above Meshtastic's own shutdown voltage once it's measured in Phase 0.
@@ -445,6 +445,20 @@ Side effects to know about:
 - **Verification:** after a reboot, the node log shows `SEN6X found` + `SEN6X: found sensor model SEN66`, and
   another client receives an `AirQualityMetrics` packet within about 30 min.
 
+### 4.9 Build and toolchain
+
+| Item | Choice |
+|---|---|
+| Framework | **ESP-IDF 6.1** via PlatformIO platform `espressif32 @ 7.1.3` (pinned in `platformio.ini`) |
+| Board | `seeed_xiao_esp32c3` |
+| Host tools | Pixi (`pixi.toml`, `pixi.lock`): Python 3.12, PlatformIO, pip (for ESP-IDF's Python env), and on Linux the host GCC used by the native tests. macOS uses the system clang. |
+| Tasks | `pixi run build` / `test` / `flash` / `monitor` / `clean` |
+| Portable code | `lib/` (e.g. `lib/senxx`), so the `native` env compiles it for host tests; ESP-IDF glue lives in `src/` |
+| Flash layout | `partitions.csv`: NVS, two 1.875 MB OTA slots, 64 KB core dump (4 MB flash) |
+| sdkconfig | `sdkconfig.defaults` is the source of truth (console on USB-Serial-JTAG, OTA rollback, core dump to flash); the generated `sdkconfig.*` is not committed |
+| I²C slave API | ESP-IDF's `i2c_slave.h` driver (`on_receive` / `on_request` callbacks); internal pull-ups off (the node provides them) |
+| CI | `.github/workflows/ci.yml`: `pixi install --locked`, `pixi run test`, `pixi run build` |
+
 ## 5. Test strategy
 
 Pure emulation can't cover the whole path: Espressif's QEMU models neither an I²C slave nor WiFi, and
@@ -500,7 +514,7 @@ speed, clock-gating unused peripherals, no LEDs, and maybe replacing the XIAO's 
 | Phase | Work | Exit gate |
 |---|---|---|
 | **0 — Hardware spike** | Build the bench Grove harness from the **draft `docs/wiring.md` §4.7.1** (level shifter fitted until the SDA/SCL voltage is known). Identify the battery + point for the battery-sense wire. Measure: Grove SDA/SCL idle voltage (3.3 V or 5 V?), Grove 5 V sag at a 350 mA pulse while the node transmits, nRF52 power-on → scan time, C3 idle current. Minimal C3 slave at `0x6B` answering the SEN66 probe with a **48-byte** reply. **D-3 checks:** (1) whether the Grove 5 V rail stays on during Meshtastic low-battery shutdown, and the battery voltage at which shutdown happens; (2) SDA/SCL levels while the node is shut down: they must stay high, or the GPIO wakeup will fire constantly; (3) the C3 in light sleep with GPIO wakeup answers the boot scan. | Node logs `SEN6X found` + `found sensor model SEN66` on 20/20 cold boots and 20/20 warm reboots; **20/20 detections from a light-sleeping C3** and no false wakes over 1 h of node shutdown, otherwise build and fit the battery-sense wire (§4.7.2); level shifter and capacitor decisions made and recorded in `docs/wiring.md`; Grove power confirmed or switched to a separate C3 cell (§4.7.1) |
-| **1 — Scaffold** | `pixi.toml`, `platformio.ini` (`seeed_xiao_esp32c3` + `native` test env), CI tasks | `pixi run build`/`test` green |
+| **1 — Scaffold** ✓ | `pixi.toml`, `platformio.ini` (`seeed_xiao_esp32c3` + `native` test env), partition table, `sdkconfig.defaults`, CI workflow; Sensirion CRC-8 as the first tested module | `pixi run build`/`test` green |
 | **2 — Emulator** | Full §3/§3a contract; T1 + T2 | Stock `SENXXSensor` passes init + 100 read cycles in T2 |
 | **3 — Poller & cache** | WiFi/SNTP/MQTT, payload parser, staleness, modes, serial CLI + `tools/configure.py`, `docs/mqtt_payload.md` + HA automation example | T3 end-to-end green; fault injection (broker down, bad auth, stale `ts`, malformed JSON) behaves as specified in §4.4; `NODE_DOWN` entry/exit on simulated node silence; `LOW_BATT` with a bench supply on the ADC pin |
 | **4 — Power** | Lower the floor; `tools/power_budget.py` with PVWatts + measured values | Measured floor ≤ 12 mA @ 3.3 V (stretch: 8 mA); budget report |
@@ -534,8 +548,12 @@ speed, clock-gating unused peripherals, no LEDs, and maybe replacing the XIAO's 
 
 ```
 solar-node-wifi/
-├── pixi.toml
-├── platformio.ini              # envs: seeed_xiao_esp32c3, native (tests)
+├── pixi.toml, pixi.lock        # host tools and tasks
+├── platformio.ini              # envs: xiao_esp32c3, native (tests)
+├── CMakeLists.txt              # ESP-IDF project file
+├── partitions.csv              # two OTA slots + core dump
+├── sdkconfig.defaults
+├── .github/workflows/ci.yml
 ├── docs/
 │   ├── PLAN.md                 # this document
 │   ├── mqtt_payload.md         # payload spec
@@ -544,13 +562,16 @@ solar-node-wifi/
 │   ├── wiring.md               # Grove harness, battery-sense wire, in-enclosure mounting
 │   ├── mosquitto_acl.example   # per-device ACL
 │   └── node_config.md          # Solar Node Meshtastic settings
-├── src/
+├── lib/                        # portable code, built for both target and host tests
+│   ├── senxx/                  # crc, emulator, encode, sen66, sen55 (SEN66 target, SEN55 fallback)
+│   ├── payload/                # JSON parse, unit conversion, freshness
+│   └── modes/                  # mode machine, backoff, node watchdog logic
+├── src/                        # ESP-IDF glue
+│   ├── CMakeLists.txt
 │   ├── main.cpp                # boot order per §4.1
-│   ├── senxx/{emulator,crc,encode,sen66,sen55}.{h,cpp}   # SEN66 target, SEN55 fallback
-│   ├── poller/{wifi,sntp,mqtt,payload}.{h,cpp}
-│   ├── cache.{h,cpp}
-│   ├── modes.{h,cpp}
-│   ├── node_watch.{h,cpp}      # NODE_DOWN watchdog, light sleep + GPIO wake
+│   ├── i2c_slave.{h,cpp}       # i2c_slave.h driver ↔ senxx emulator
+│   ├── poller/{wifi,sntp,mqtt}.{h,cpp}
+│   ├── node_watch.{h,cpp}      # light sleep + GPIO wake
 │   ├── battery.{h,cpp}         # optional battery-sense interlock
 │   ├── config.{h,cpp}          # NVS
 │   ├── cli/{serial,commands}.{h,cpp}
@@ -559,9 +580,10 @@ solar-node-wifi/
 │   ├── configure.py            # serial (bench)
 │   ├── remote.py               # MQTT remote management
 │   └── power_budget.py
-├── test/
-│   ├── native/                 # T1
-│   ├── driver_harness/         # T2: real SENXXSensor vs fake TwoWire; fetches meshtastic/firmware
-│   │                           #     @ 727d8c3 into vendor/ at build time (gitignored)
-│   └── bench/                  # T3: mosquitto config, publisher.py, receiver.py
+└── test/
+    ├── native/                 # T1 (PlatformIO Unity tests)
+    ├── driver_harness/         # T2: real SENXXSensor vs fake TwoWire; fetches meshtastic/firmware
+    │                           #     @ 727d8c3 into vendor/ at build time (gitignored)
+    └── bench/                  # T3: mosquitto config, publisher.py, receiver.py
 ```
+

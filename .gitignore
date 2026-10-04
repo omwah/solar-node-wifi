@@ -1,2 +1,11 @@
 # Meshtastic firmware source fetched by the T2 driver harness
 test/driver_harness/vendor/
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+# PlatformIO build output and generated ESP-IDF config (sdkconfig.defaults is the source of truth)
+.pio/
+sdkconfig.*
+!sdkconfig.defaults
+# Editor
+.vscode/

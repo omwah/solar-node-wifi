@@ -1,0 +1,23 @@
+[workspace]
+authors = ["James McDuffie <409331+omwah@users.noreply.github.com>"]
+channels = ["conda-forge"]
+name = "solar-node-wifi"
+platforms = ["linux-64", "osx-arm64", "osx-64"]
+version = "0.1.0"
+
+[tasks]
+build = { cmd = "pio run -e xiao_esp32c3", description = "Build the XIAO ESP32-C3 firmware" }
+test = { cmd = "pio test -e native", description = "Run host unit tests (T1)" }
+flash = { cmd = "pio run -e xiao_esp32c3 -t upload", description = "Flash the firmware over USB" }
+monitor = { cmd = "pio device monitor -e xiao_esp32c3", description = "Open the USB serial console" }
+clean = { cmd = "pio run -t clean", description = "Remove build outputs" }
+
+[dependencies]
+python = "3.12.*"
+platformio = ">=6.2.0,<7"
+pip = ">=26.2.1,<27"
+
+# Host compiler for the native test env; macOS uses the system clang.
+[target.linux-64.dependencies]
+gcc = ">=16.2.0,<16.3"
+gxx = ">=16.2.0,<16.3"
