@@ -211,7 +211,7 @@ the firmware forwards what it gets.
 | `NORMAL` | Default | Poll at `poll_interval` |
 | `BACKOFF` | Connect/auth/parse failure | Interval doubles on each failure up to 6 h; resets on the first success. Auth errors jump straight to the maximum. |
 | `SESSION` | `debug: true` in a valid payload, or a `session` command | WiFi and MQTT stay connected for interactive management; ends at `debug_until`, the requested length, or the 2 h cap |
-| `NODE_DOWN` | No I²C traffic from the node for `node_silence_s` (§4.6) | Light sleep, wake on an I²C line edge; one heartbeat poll every `node_down_heartbeat_s` (default 6 h) so the C3 stays remotely reachable; any node traffic → `NORMAL` |
+| `NODE_DOWN` | No I²C traffic from the node for `node_silence_s` (§4.6) | Light sleep, wake on an I²C line edge; one heartbeat poll every `heartbeat_s` (default 6 h) so the C3 stays remotely reachable; any node traffic → `NORMAL` |
 | `LOW_BATT` | Only if the battery-sense wire is fitted: battery < `batt_low_v` (§4.6) | Same as `NODE_DOWN`; leaves only when the battery is ≥ `batt_resume_v` **and** node traffic is seen |
 
 Backstop: a hard cap on WiFi starts per day (default 400), whatever the mode.
@@ -295,7 +295,7 @@ shuts down, this section is moot and both mechanisms stay disabled.
 - Hardware: a 1 MΩ / 1 MΩ divider from the node's battery + to XIAO `D1` (GPIO3, ADC1), with 100 nF from the
   pin to GND. Max 4.2 V → 2.1 V at the pin; divider drain ≈ 2 µA. Avoid `D0`/GPIO2 (a boot-strapping
   pin). Shared GND through Grove.
-- Firmware (always built, enabled by `batt_adc_enabled`): a calibrated ADC reading (`esp_adc` oneshot + `adc_cali`, 12 dB attenuation,
+- Firmware (always built, enabled by `batt_enabled`): a calibrated ADC reading (`esp_adc` oneshot + `adc_cali`, 12 dB attenuation,
   16-sample average) every 60 s and before every WiFi start. Below `batt_low_v` (default **3.40 V**)
   → `LOW_BATT`. Resume needs ≥ `batt_resume_v` (default **3.65 V**, hysteresis) **and** node traffic.
   Thresholds to be set above Meshtastic's own shutdown voltage once it's measured in Phase 0.
