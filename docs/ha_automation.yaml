@@ -1,0 +1,121 @@
+# Home Assistant automation blueprint: publishes the Solar Node telemetry payload
+# (docs/mqtt_payload.md) as one retained MQTT message every minute.
+#
+# Import: Settings > Automations & Scenes > Blueprints > Import Blueprint, or copy this
+# file to config/blueprints/automation/solarnode/ha_automation.yaml and reload.
+# Then create an automation from it and pick the AirGradient and Tempest devices.
+blueprint:
+  name: Solar Node telemetry publisher
+  description: >-
+    Publishes every numeric sensor of the selected AirGradient and Tempest devices to
+    solarnode/<node_id>/telemetry as [value, unit, last_reported] triples, keyed by the
+    entity name with the device prefix stripped. The bridge firmware picks the keys it
+    needs and converts units itself.
+  domain: automation
+  input:
+    node_id:
+      name: Node id
+      description: Topic slug, the same value as the bridge's node_id setting.
+      default: site-01
+      selector:
+        text: {}
+    aq_device:
+      name: AirGradient device
+      selector:
+        device:
+          filter:
+            - integration: airgradient
+    env_device:
+      name: Tempest (WeatherFlow) device
+      selector:
+        device:
+          filter:
+            - integration: weatherflow
+    rename_map:
+      name: Rename map
+      description: >-
+        Optional {"published_key": "expected_key"} pairs for installs in other languages
+        or hand-renamed entities, e.g. {"temperatura": "temperature"}.
+      default: {}
+      selector:
+        object: {}
+    debug_switch:
+      name: Live session switch (optional)
+      description: >-
+        An input_boolean. Turning it on asks the bridge for a live management session
+        lasting the time below, counted from when the switch was turned on.
+      default: ""
+      selector:
+        entity:
+          filter:
+            - domain: input_boolean
+    debug_minutes:
+      name: Live session length
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 120
+          unit_of_measurement: min
+
+mode: single
+
+triggers:
+  - trigger: time_pattern
+    seconds: 0
+
+variables:
+  node_id: !input node_id
+  aq_device: !input aq_device
+  env_device: !input env_device
+  rename_map: !input rename_map
+  debug_switch: !input debug_switch
+  debug_minutes: !input debug_minutes
+
+actions:
+  - action: mqtt.publish
+    data:
+      topic: "solarnode/{{ node_id }}/telemetry"
+      qos: 0
+      retain: true
+      payload: >-
+        {%- macro block(dev) -%}
+          {%- if not dev -%}null{%- else -%}
+          {%- set name = device_attr(dev, 'name_by_user') or device_attr(dev, 'name') or '' -%}
+          {%- set ents = device_entities(dev) | select('match', 'sensor[.]') | list -%}
+          {%- set objs = ents | map('replace', 'sensor.', '', 1) | list -%}
+          {%- set p = namespace(prefix=(name | slugify) ~ '_') -%}
+          {%- if (objs | select('match', p.prefix) | list | count) * 2 < (objs | count) and objs | count > 0 -%}
+            {#- device renamed after its entities were created: longest common prefix at '_' -#}
+            {%- set p.prefix = '' -%}
+            {%- set parts = objs[0].split('_') -%}
+            {%- for i in range(parts | count - 1) -%}
+              {%- set candidate = (parts[:i + 1] | join('_')) ~ '_' -%}
+              {%- if objs | select('match', candidate) | list | count == objs | count -%}
+                {%- set p.prefix = candidate -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {%- set v = namespace(values={}) -%}
+          {%- for e in ents -%}
+            {%- set obj = e[7:] -%}
+            {%- set key = obj[p.prefix | length:] if obj.startswith(p.prefix) and p.prefix else obj -%}
+            {%- set key = rename_map.get(key, key) -%}
+            {%- set st = states(e) -%}
+            {%- if st | is_number or st in ['unavailable', 'unknown'] -%}
+              {%- set value = st | float if st | is_number else none -%}
+              {%- set s = states[e] -%}
+              {%- set when = s.last_reported if s.last_reported is defined else s.last_updated -%}
+              {%- set v.values = dict(v.values, **{key: [value, state_attr(e, 'unit_of_measurement'), as_timestamp(when) | int]}) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ {'device': name, 'prefix': p.prefix, 'values': v.values} | to_json }}
+          {%- endif -%}
+        {%- endmacro -%}
+        {%- set debug_on = debug_switch != '' and is_state(debug_switch, 'on') -%}
+        {%- set until = (as_timestamp(states[debug_switch].last_changed) + debug_minutes * 60) | int if debug_on else none -%}
+        {"ts": {{ now() | as_timestamp | int }},
+         "aq": {{ block(aq_device) }},
+         "env": {{ block(env_device) }},
+         "debug": {{ debug_on | to_json }},
+         "debug_until": {{ until | to_json }}}

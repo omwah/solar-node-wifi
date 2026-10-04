@@ -36,6 +36,8 @@ gxx = ">=16.2.0,<16.3"
 python = "3.12.*"
 paho-mqtt = ">=2.1.0,<3"
 pytest = ">=9.1.1,<10"
+jinja2 = ">=3.1,<4"
+pyyaml = ">=6,<7"
 
 [feature.bench.target.linux-64.dependencies]
 mosquitto = ">=2.0.20,<3"

@@ -1,0 +1,31 @@
+# Mosquitto ACL for one Solar Node bridge (docs/PLAN.md §4.5).
+# Use with password_file and allow_anonymous false. Replace site-01 with the node_id.
+#
+# mosquitto.conf:
+#   listener 8883
+#   cafile   /etc/mosquitto/certs/ca.crt
+#   certfile /etc/mosquitto/certs/server.crt
+#   keyfile  /etc/mosquitto/certs/server.key
+#   allow_anonymous false
+#   password_file /etc/mosquitto/passwd
+#   acl_file /etc/mosquitto/acl
+
+# The bridge: reads its telemetry and commands, writes replies, state and logs.
+user solarnode-site-01
+topic read  solarnode/site-01/telemetry
+topic read  solarnode/site-01/cmd
+topic write solarnode/site-01/resp
+topic write solarnode/site-01/state
+topic write solarnode/site-01/log
+
+# Home Assistant: publishes telemetry, reads state (for dashboards and discovery).
+user homeassistant
+topic write solarnode/+/telemetry
+topic read  solarnode/+/state
+
+# Operator (tools/remote.py): the only account allowed to send commands.
+user solarnode-admin
+topic write solarnode/+/cmd
+topic read  solarnode/+/resp
+topic read  solarnode/+/state
+topic read  solarnode/+/log
